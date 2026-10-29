@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>近隣1km 飲食店マップ一覧</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- ヘッダー -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-utensils text-orange-500 text-xl"></i>
+        <h1 class="text-lg font-bold text-slate-800">近隣1km 飲食店マップ</h1>
+      </div>
+      <button id="open-settings-btn" class="flex items-center space-x-1 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition-colors border border-slate-300">
+        <i class="fa-solid fa-key text-slate-500"></i>
+        <span>APIキー設定</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+    <!-- 操作パネル -->
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">現在地から半径1km以内の飲食店を検索</h2>
+          <p class="text-xs text-slate-500 mt-1">端末のGPS位置情報をもとに、営業時間・標準価格帯・Googleマップリンクを取得します。</p>
+        </div>
+        <button id="search-btn" class="flex items-center justify-center space-x-2 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition-all duration-150">
+          <i class="fa-solid fa-location-crosshairs"></i>
+          <span>現在地で検索する</span>
+        </button>
+      </div>
+
+      <!-- ステータス・メッセージバー -->
+      <div id="status-bar" class="hidden mt-4 p-3 rounded-lg text-sm"></div>
+    </div>
+
+    <!-- 結果一覧テーブルエリア -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 bg-slate-50/50">
+        <div class="flex items-center space-x-2">
+          <h3 class="font-bold text-slate-700">店舗一覧</h3>
+          <!-- モバイル用の横スクロール案内ヒント -->
+          <span class="sm:hidden text-[10px] text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded">
+            <i class="fa-solid fa-arrows-left-right mr-1"></i>横スクロール可能
+          </span>
+        </div>
+        <span id="result-count" class="text-sm font-medium text-slate-500">未検索</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-slate-600 border-b border-slate-200 uppercase text-xs">
+              <th class="py-3 px-4 font-semibold w-1/4">店舗名 / ジャンル</th>
+              <th class="py-3 px-4 font-semibold w-1/3">営業時間</th>
+              <th class="py-3 px-4 font-semibold w-1/4">標準価格帯（目安・平均）</th>
+              <th class="py-3 px-4 font-semibold w-1/6 text-center">Googleマップ</th>
+            </tr>
+          </thead>
+          <tbody id="restaurant-table-body" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="4" class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-map-location-dot text-4xl mb-3 block text-slate-300"></i>
+                「現在地で検索する」ボタンを押して検索を開始してください。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- フッター -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    <p>Powered by <a href="http://webservice.recruit.co.jp/" target="_blank" rel="noopener noreferrer" class="underline hover:text-slate-600">ホットペッパーグルメ Webサービス</a></p>
+  </footer>
+
+  <!-- APIキー設定モーダル -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-key text-orange-500"></i>
+          APIキー設定
+        </h3>
+        <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+        リクルートWEBサービスで無料発行した「ホットペッパーAPIキー」を入力してください。キーはお使いのブラウザ内（LocalStorage）にのみ安全に保存されます。
+      </p>
+      <div class="space-y-4">
+        <div>
+          <label for="api-key-input" class="block text-xs font-semibold text-slate-700 mb-1">ホットペッパー APIキー</label>
+          <input type="text" id="api-key-input" placeholder="例: 1234567890abcdef" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <button id="clear-key-btn" class="text-xs text-red-500 hover:text-red-700 underline">キーを削除</button>
+          <div class="space-x-2">
+            <button id="cancel-modal-btn" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">キャンセル</button>
+            <button id="save-key-btn" class="px-4 py-2 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg shadow">保存する</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アプリケーション スクリプト（インライン化により外部ファイルの404を完全防止） -->
+  <script>
+    /**
+     * 1. LocalStorage管理モジュール
+     */
+    const StorageManager = (() => {
+      const STORAGE_KEY = 'hotpepper_api_key';
+      let memoryStore = {};
+
+      const isStorageAvailable = () => {
+        try {
+          const testKey = '__storage_test__';
+          localStorage.setItem(testKey, testKey);
+          localStorage.removeItem(testKey);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      };
+
+      const hasStorage = isStorageAvailable();
+
+      const getApiKey = () => {
+        try {
+          if (hasStorage) {
+            return localStorage.getItem(STORAGE_KEY) || '';
+          }
+          return memoryStore[STORAGE_KEY] || '';
+        } catch (e) {
+          return memoryStore[STORAGE_KEY] || '';
+        }
+      };
+
+      const setApiKey = (key) => {
+        if (!key) return;
+        const sanitized = key.trim();
+        try {
+          if (hasStorage) {
+            localStorage.setItem(STORAGE_KEY, sanitized);
+          } else {
+            memoryStore[STORAGE_KEY] = sanitized;
+          }
+        } catch (e) {
+          memoryStore[STORAGE_KEY] = sanitized;
+        }
+      };
+
+      const hasApiKey = () => {
+        return Boolean(getApiKey());
+      };
+
+      const clearApiKey = () => {
+        try {
+          if (hasStorage) {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+          delete memoryStore[STORAGE_KEY];
+        } catch (e) {
+          delete memoryStore[STORAGE_KEY];
+        }
+      };
+
+      return {
+        getApiKey,
+        setApiKey,
+        hasApiKey,
+        clearApiKey
+      };
+    })();
+
+    /**
+     * 2. Geolocation API 位置情報取得モジュール
+     */
+    const GeoManager = (() => {
+      const getCurrentLocation = () => {
+        return new Promise((resolve, reject) => {
+          if (!navigator.geolocation) {
+            reject(new Error('お使いのブラウザは位置情報サービス（Geolocation API）に対応していません。'));
+            return;
+          }
+
+          const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          };
+
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              resolve({
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              });
+            },
+            (error) => {
+              let errorMsg = '位置情報の取得に失敗しました。';
+              switch (error.code) {
+                case error.PERMISSION_DENIED:
+                  errorMsg = '位置情報の利用が許可されていません。ブラウザ設定で位置情報を許可してください。';
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  errorMsg = '端末の位置情報を特定できませんでした。電波環境の良い場所で再度お試しください。';
+                  break;
+                case error.TIMEOUT:
+                  errorMsg = '位置情報の取得がタイムアウトしました。再度実行してください。';
+                  break;
+              }
+              reject(new Error(errorMsg));
+            },
+            options
+          );
+        });
+      };
+
+      return {
+        getCurrentLocation
+      };
+    })();
+
+    /**
+     * 3. ホットペッパーAPI クライアントモジュール
+     */
+    const HotpepperApi = (() => {
+      const fetchNearbyRestaurants = async (apiKey, lat, lng) => {
+        if (!apiKey || !apiKey.trim()) {
+          throw new Error('APIキーが設定されていません。右上の「APIキー設定」より登録してください。');
+        }
+
+        const sanitizedKey = apiKey.trim();
+        const latVal = typeof lat === 'number' ? lat.toFixed(6) : Number(lat).toFixed(6);
+        const lngVal = typeof lng === 'number' ? lng.toFixed(6) : Number(lng).toFixed(6);
+
+        const queryParams = new URLSearchParams({
+          key: sanitizedKey,
+          lat: latVal,
+          lng: lngVal,
+          range: '3',
+          count: '50'
+        });
+
+        // 試行するエンドポイント候補
+        const candidateUrls = [
+          `/api/restaurants?${queryParams.toString()}`
+        ];
+
+        // ローカル別ポート（Live Serverなど）で開かれた場合のフォールバック
+        if (window.location.origin !== 'http://localhost:3000' && window.location.protocol.startsWith('http')) {
+          candidateUrls.push(`http://localhost:3000/api/restaurants?${queryParams.toString()}`);
+        }
+
+        let lastError = null;
+
+        for (const requestUrl of candidateUrls) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          try {
+            const response = await fetch(requestUrl, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              const errData = await response.json().catch(() => null);
+              const errMsg = errData?.error || `HTTPエラー: ${response.status} ${response.statusText}`;
+              throw new Error(errMsg);
+            }
+
+            const data = await response.json();
+
+            if (!data || !data.results) {
+              throw new Error('無効なAPIレスポンスを受信しました。');
+            }
+
+            if (data.results.error) {
+              const errDetail = data.results.error[0]?.message || 'APIリクエストエラーが発生しました。';
+              const errCode = data.results.error[0]?.code;
+              if (errCode === 2000 || errDetail.includes('APIキー')) {
+                throw new Error('ホットペッパーAPIエラー: APIキーが正しくありません。右上の「APIキー設定」より有効なキーをご確認ください。');
+              }
+              throw new Error(`ホットペッパーAPIエラー: ${errDetail}`);
+            }
+
+            const shops = data.results.shop || [];
+            const available = parseInt(data.results.results_available, 10) || shops.length;
+            const returned = parseInt(data.results.results_returned, 10) || shops.length;
+
+            return { shops, available, returned };
+
+          } catch (err) {
+            clearTimeout(timeoutId);
+            lastError = err;
+          }
+        }
+
+        if (lastError?.name === 'AbortError') {
+          throw new Error('ホットペッパーAPIへの接続がタイムアウトしました。通信環境をご確認ください。');
+        }
+
+        const isNetworkOr404 = lastError?.message?.includes('Failed to fetch') ||
+                               lastError?.message?.includes('NetworkError') ||
+                               lastError?.message?.includes('404');
+
+        if (isNetworkOr404) {
+          throw new Error(
+            '<strong>【API中継エラー】</strong><br>' +
+            'リクルート社によるJSONP廃止（2023年10月）に伴い、ホットペッパーAPIの直接通信はブラウザのCORS制限により遮断されます。<br><br>' +
+            '📱 <strong>スマートフォンでご利用の場合:</strong><br>' +
+            '本リポジトリを <strong>Vercel</strong>（無料）に連携すると、同梱の <code>/api/restaurants</code> サーバーレス関数が自動展開され、スマホのブラウザから正常にご利用いただけます。<br><br>' +
+            '💻 <strong>PCローカルでご利用の場合:</strong><br>' +
+            'ターミナルで <code>node server.js</code> を実行し、<code>http://localhost:3000</code> よりアクセスしてください。'
+          );
+        }
+
+        throw lastError || new Error('飲食店の検索に失敗しました。');
+      };
+
+      return {
+        fetchNearbyRestaurants
+      };
+    })();
+
+    /**
+     * 4. アプリケーション コントローラー & UI描画
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+      // DOM要素
+      const searchBtn = document.getElementById('search-btn');
+      const statusBar = document.getElementById('status-bar');
+      const tableBody = document.getElementById('restaurant-table-body');
+      const resultCount = document.getElementById('result-count');
+
+      // モーダル要素
+      const settingsModal = document.getElementById('settings-modal');
+      const openSettingsBtn = document.getElementById('open-settings-btn');
+      const closeModalBtn = document.getElementById('close-modal-btn');
+      const cancelModalBtn = document.getElementById('cancel-modal-btn');
+      const saveKeyBtn = document.getElementById('save-key-btn');
+      const clearKeyBtn = document.getElementById('clear-key-btn');
+      const apiKeyInput = document.getElementById('api-key-input');
+
+      const escapeHtml = (str) => {
+        if (!str) return '';
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      };
+
+      const createGoogleMapsUrl = (name, address) => {
+        const query = encodeURIComponent(`${name || ''} ${address || ''}`.trim());
+        return `https://www.google.com/maps/search/?api=1&query=${query}`;
+      };
+
+      const showStatus = (message, type = 'info') => {
+        statusBar.classList.remove('hidden', 'bg-blue-50', 'text-blue-700', 'bg-red-50', 'text-red-700', 'bg-green-50', 'text-green-700');
+
+        if (type === 'error') {
+          statusBar.classList.add('bg-red-50', 'text-red-700', 'border', 'border-red-200');
+        } else if (type === 'success') {
+          statusBar.classList.add('bg-green-50', 'text-green-700', 'border', 'border-green-200');
+        } else {
+          statusBar.classList.add('bg-blue-50', 'text-blue-700', 'border', 'border-blue-200');
+        }
+
+        statusBar.innerHTML = message;
+      };
+
+      const openModal = () => {
+        apiKeyInput.value = StorageManager.getApiKey();
+        settingsModal.classList.remove('hidden');
+        apiKeyInput.focus();
+      };
+
+      const closeModal = () => {
+        settingsModal.classList.add('hidden');
+      };
+
+      openSettingsBtn.addEventListener('click', openModal);
+      closeModalBtn.addEventListener('click', closeModal);
+      cancelModalBtn.addEventListener('click', closeModal);
+
+      saveKeyBtn.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (!key) {
+          alert('APIキーを入力してください。');
+          return;
+        }
+        StorageManager.setApiKey(key);
+        closeModal();
+        showStatus('APIキーをブラウザに保存しました。「現在地で検索する」を実行できます。', 'success');
+      });
+
+      clearKeyBtn.addEventListener('click', () => {
+        if (confirm('保存されているAPIキーを削除しますか？')) {
+          StorageManager.clearApiKey();
+          apiKeyInput.value = '';
+          closeModal();
+          showStatus('APIキーを削除しました。', 'info');
+        }
+      });
+
+      const renderTable = (shops, available, returned) => {
+        if (!shops || shops.length === 0) {
+          resultCount.textContent = '0件';
+          tableBody.innerHTML = `
+            <tr>
+              <td colspan="4" class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-circle-exclamation text-3xl mb-2 block text-amber-400"></i>
+                半径1km以内に飲食店が見つかりませんでした。
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        if (available > returned) {
+          resultCount.textContent = `${returned}件（全${available}件中）を表示中`;
+        } else {
+          resultCount.textContent = `${returned}件の店舗を表示中`;
+        }
+
+        const rowsHtml = shops.map((shop) => {
+          const name = escapeHtml(shop.name || '名称不明');
+          const genre = escapeHtml(shop.genre?.name || 'ジャンル情報なし');
+          const address = escapeHtml(shop.address || '');
+          const openHours = escapeHtml(shop.open || '営業時間情報なし');
+          const budgetName = escapeHtml(shop.budget?.name || '目安なし');
+          const budgetAverage = escapeHtml(shop.budget?.average || '平均情報なし');
+          const gmapsUrl = createGoogleMapsUrl(shop.name, shop.address);
+
+          return `
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="py-3 px-4 align-top">
+                <div class="font-bold text-slate-800 text-sm">${name}</div>
+                <div class="text-xs text-orange-600 font-medium mt-0.5">${genre}</div>
+                <div class="text-xs text-slate-400 mt-1 flex items-start gap-1">
+                  <i class="fa-solid fa-location-dot mt-0.5 text-slate-400 flex-shrink-0"></i>
+                  <span>${address}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 align-top text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                ${openHours}
+              </td>
+              <td class="py-3 px-4 align-top">
+                <div class="inline-block bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                  <i class="fa-solid fa-coins mr-1"></i>${budgetName}
+                </div>
+                <div class="text-xs text-slate-500 mt-1.5">
+                  <span class="text-slate-400">平均:</span> ${budgetAverage}
+                </div>
+              </td>
+              <td class="py-3 px-4 align-top text-center">
+                <a href="${gmapsUrl}" target="_blank" rel="noopener noreferrer" 
+                   class="inline-flex items-center space-x-1 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-colors whitespace-nowrap">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                  <span>マップを開く</span>
+                </a>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        tableBody.innerHTML = rowsHtml;
+      };
+
+      searchBtn.addEventListener('click', async () => {
+        if (!StorageManager.hasApiKey()) {
+          openModal();
+          showStatus('検索を実行するには、まずホットペッパーAPIキーを設定してください。', 'info');
+          return;
+        }
+
+        const apiKey = StorageManager.getApiKey();
+
+        searchBtn.disabled = true;
+        searchBtn.classList.add('opacity-70', 'cursor-not-allowed');
+        searchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i><span>検索中...</span>';
+        showStatus('<i class="fa-solid fa-spinner fa-spin mr-2"></i>端末の現在地を取得しています...', 'info');
+
+        try {
+          const coords = await GeoManager.getCurrentLocation();
+          showStatus(`<i class="fa-solid fa-spinner fa-spin mr-2"></i>現在地を取得しました (緯度: ${coords.lat.toFixed(4)}, 経度: ${coords.lng.toFixed(4)})。周辺1kmの店舗を検索中...`, 'info');
+
+          const result = await HotpepperApi.fetchNearbyRestaurants(apiKey, coords.lat, coords.lng);
+
+          renderTable(result.shops, result.available, result.returned);
+
+          const hitMessage = result.available > result.returned
+            ? `検索完了: 半径1km以内に ${result.available} 件見つかりました（上位 ${result.returned} 件を表示中）。`
+            : `検索完了: 半径1km以内に ${result.returned} 件の飲食店が見つかりました。`;
+
+          showStatus(hitMessage, 'success');
+
+        } catch (error) {
+          console.error(error);
+          showStatus(`<i class="fa-solid fa-triangle-exclamation mr-1"></i>${error.message}`, 'error');
+        } finally {
+          searchBtn.disabled = false;
+          searchBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+          searchBtn.innerHTML = '<i class="fa-solid fa-location-crosshairs mr-1"></i><span>現在地で検索する</span>';
+        }
+      });
+
+      if (!StorageManager.hasApiKey()) {
+        setTimeout(() => {
+          openModal();
+        }, 500);
+      }
+    });
+  </script>
+</body>
+</html>

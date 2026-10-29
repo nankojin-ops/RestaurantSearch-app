@@ -1,9 +1,5 @@
 {
-  "version": 2,
   "rewrites": [
-    {
-      "source": "/api/restaurants",
-      "destination": "/api/restaurants.js"
-    }
+    { "source": "/api/restaurants", "destination": "/api/restaurants.js" }
   ]
 }
