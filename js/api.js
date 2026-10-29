@@ -1,9 +1,10 @@
 /**
- * ホットペッパーAPI JSONPクライアントモジュール
+ * ホットペッパーAPI クライアントモジュール
+ * 
+ * リクルートWEBサービスのJSONP廃止に伴い、ローカルプロキシ(/api/restaurants)を
+ * 経由してAPIからJSONデータを取得します。
  */
 const HotpepperApi = (() => {
-  const BASE_URL = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
-
   /**
    * 現在地から半径1km以内の飲食店を取得する
    * @param {string} apiKey - ホットペッパーAPIキー
@@ -11,88 +12,100 @@ const HotpepperApi = (() => {
    * @param {number} lng - 経度
    * @returns {Promise<{shops: Array, available: number, returned: number}>}
    */
-  const fetchNearbyRestaurants = (apiKey, lat, lng) => {
-    return new Promise((resolve, reject) => {
-      if (!apiKey) {
-        reject(new Error('APIキーが設定されていません。'));
-        return;
-      }
+  const fetchNearbyRestaurants = async (apiKey, lat, lng) => {
+    if (!apiKey) {
+      throw new Error('APIキーが設定されていません。右上の「APIキー設定」より登録してください。');
+    }
 
-      // JSONP用のユニークなコールバック関数名を生成
-      const callbackName = `__hp_jsonp_cb_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const params = new URLSearchParams({
+      key: apiKey.trim(),
+      lat: lat.toString(),
+      lng: lng.toString(),
+      range: '3',
+      count: '50'
+    });
 
-      // スクリプトタグの削除ヘルパー
-      const removeScriptTag = () => {
-        const scriptElem = document.getElementById(callbackName);
-        if (scriptElem && scriptElem.parentNode) {
-          scriptElem.parentNode.removeChild(scriptElem);
-        }
-      };
+    // 試行するエンドポイント候補
+    // 1. 同一オリジンのプロキシ (/api/restaurants)
+    // 2. ローカルサーバー (http://localhost:3000/api/restaurants) - Live Server等で別ポートから開かれた場合の救済
+    const candidateUrls = [
+      `/api/restaurants?${params.toString()}`
+    ];
 
-      // タイムアウト設定 (10秒)
-      const timeoutId = setTimeout(() => {
-        // 遅延レスポンス到達時の ReferenceError を防止するため、自己削除型 no-op 関数へ差し替え
-        window[callbackName] = () => {
-          delete window[callbackName];
-        };
-        removeScriptTag();
-        reject(new Error('ホットペッパーAPIへの接続がタイムアウトしました。通信環境をご確認ください。'));
-      }, 10000);
+    if (window.location.origin !== 'http://localhost:3000') {
+      candidateUrls.push(`http://localhost:3000/api/restaurants?${params.toString()}`);
+    }
 
-      // 正常完了時のクリーンアップ処理
-      const cleanup = () => {
+    let lastError = null;
+
+    for (const requestUrl of candidateUrls) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(requestUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal
+        });
+
         clearTimeout(timeoutId);
-        if (window[callbackName]) {
-          delete window[callbackName];
-        }
-        removeScriptTag();
-      };
 
-      // グローバルコールバック関数の登録
-      window[callbackName] = (data) => {
-        cleanup();
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => null);
+          const errMsg = errJson?.error || `HTTPエラー (${response.status} ${response.statusText})`;
+          throw new Error(errMsg);
+        }
+
+        const data = await response.json();
 
         if (!data || !data.results) {
-          reject(new Error('無効なAPIレスポンスを受信しました。'));
-          return;
+          throw new Error('無効なAPIレスポンスを受信しました。');
         }
 
+        // リクルートAPIのエラー返却チェック
         if (data.results.error) {
           const errDetail = data.results.error[0]?.message || 'APIリクエストエラーが発生しました。';
-          reject(new Error(`ホットペッパーAPIエラー: ${errDetail}`));
-          return;
+          const errCode = data.results.error[0]?.code;
+          if (errCode === 2000 || errDetail.includes('APIキー')) {
+            throw new Error(`ホットペッパーAPIエラー: APIキーが正しくありません。右上の「APIキー設定」より有効なキーを設定してください。`);
+          }
+          throw new Error(`ホットペッパーAPIエラー: ${errDetail}`);
         }
 
         const shops = data.results.shop || [];
         const available = parseInt(data.results.results_available, 10) || shops.length;
         const returned = parseInt(data.results.results_returned, 10) || shops.length;
 
-        resolve({ shops, available, returned });
-      };
+        return { shops, available, returned };
 
-      // パラメータの組み立て (range=3: 半径1000m)
-      const params = new URLSearchParams({
-        key: apiKey,
-        lat: lat.toString(),
-        lng: lng.toString(),
-        range: '3',
-        datum: 'world',
-        count: '50',
-        format: 'jsonp',
-        callback: callbackName
-      });
+      } catch (err) {
+        clearTimeout(timeoutId);
 
-      // <script>タグの発行・挿入
-      const script = document.createElement('script');
-      script.id = callbackName;
-      script.src = `${BASE_URL}?${params.toString()}`;
-      script.onerror = () => {
-        cleanup();
-        reject(new Error('APIスクリプトのロードに失敗しました。APIキーまたはネットワーク接続をご確認ください。'));
-      };
+        if (err.name === 'AbortError') {
+          lastError = new Error('ホットペッパーAPIへの接続がタイムアウトしました。通信環境やAPIキーをご確認ください。');
+        } else {
+          lastError = err;
+        }
 
-      document.head.appendChild(script);
-    });
+        // 次のURL候補がある場合は再試行
+      }
+    }
+
+    // すべてのエンドポイントで失敗した場合の親切なメッセージ
+    const isNetworkError = lastError?.message?.includes('Failed to fetch') || 
+                           lastError?.message?.includes('NetworkError') ||
+                           lastError?.message?.includes('Load failed');
+
+    if (isNetworkError) {
+      throw new Error(
+        'ローカルサーバーに接続できませんでした。<br>' +
+        'リクルート社の仕様変更（JSONP廃止）に伴い、本アプリの実行にはローカルサーバーが必要です。<br>' +
+        'ターミナルで <code>node server.js</code> を実行するか、フォルダ内の <code>start.bat</code> をダブルクリックして起動してください。'
+      );
+    }
+
+    throw lastError || new Error('飲食店の検索に失敗しました。');
   };
 
   return {

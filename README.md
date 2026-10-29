@@ -7,7 +7,7 @@
 ## 📌 主な機能・特徴
 
 - **📍 現在地からワンクリック検索**
-  - ブラウザの Geolocation API を利用して高精度な位置情報（緯度・経度）を取得し、半径1km（約徒歩10〜15分圏内）の飲食店を自動検索します。
+  - ブラウザの Geolocation API を利用して高精度な位置情報（緯度・経度）を取得し、半径1km（徒歩10〜15分圏内）の飲食店を自動検索します。
 - **📋 充実した店舗一覧テーブル**
   - **店舗名 / ジャンル / キャッチコピー**: お店の名前と料理ジャンル、特徴を表示
   - **営業時間 / 定休日**: 営業スケジュールを一目で確認
@@ -16,8 +16,8 @@
 - **🔐 安心・手軽なAPIキー管理**
   - ユーザー自身のホットペッパーAPIキーを画面右上の「APIキー設定」モーダルから登録・更新可能。
   - APIキーはお使いのブラウザ内（LocalStorage）にのみ安全に保存され、外部サーバーへ送信されることはありません。
-- **🌐 静的ホスティング完全対応（サーバーレス）**
-  - CORS（Cross-Origin Resource Sharing）制約を回避するため、JSONP方式を採用。バックエンドサーバーを構築することなく、GitHub Pages や Vercel などの静的ホスティング環境でそのまま動作します。
+- **⚡ ゼロ依存のローカル中継サーバー（Node.js標準）**
+  - リクルートWEBサービスのJSONP提供終了に伴うCORS制約を解消するため、Node.js標準モジュールのみで動く軽量Webサーバー＆プロキシ（`server.js`）を同梱しています。追加の `npm install` は不要です。
 - **📱 レスポンシブ＆モダンUI**
   - Tailwind CSS を採用し、PC・スマートフォン・タブレット問わず直感的に操作できます。
 
@@ -28,6 +28,7 @@
 | 分類 | 技術 |
 | :--- | :--- |
 | **フロントエンド** | HTML5, Vanilla JavaScript (ES6+), Tailwind CSS (CDN), Font Awesome 6 |
+| **バックエンド / プロキシ** | Node.js (標準モジュール: http, https - 追加npmパッケージ不要) |
 | **外部API** | [ホットペッパーグルメ Webサービス](http://webservice.recruit.co.jp/) (リクルート) |
 | **Web API** | Geolocation API, Web Storage API (LocalStorage) |
 
@@ -38,8 +39,11 @@
 ```plaintext
 RestaurantSearch-app/
 ├── index.html          # メインHTML（UIレイアウトおよびモーダル）
+├── server.js           # ローカルWebサーバー ＆ APIプロキシ（Node.js標準）
+├── start.bat           # Windows用 ワンクリック起動バッチファイル
+├── package.json        # プロジェクト設定（npm start用）
 ├── js/
-│   ├── api.js          # ホットペッパーAPI JSONPクライアントモジュール
+│   ├── api.js          # ホットペッパーAPI クライアントモジュール
 │   ├── app.js          # イベント処理・DOMレンダリング・全体制御
 │   ├── geo.js          # Geolocation APIによる位置情報取得モジュール
 │   └── storage.js      # LocalStorageによるAPIキー永続化モジュール
@@ -56,23 +60,22 @@ RestaurantSearch-app/
 2. 会員登録を行い、発行された「APIキー」をコピーします。
 
 ### 2. アプリの起動
-本アプリは静的HTML/JSで構成されているため、以下のいずれかの方法で起動できます。
 
-#### 方法A: ローカルサーバーで起動（推奨）
-VS Code拡張機能「Live Server」を使用するか、以下のコマンドを実行してローカルサーバーを立ち上げます。
+以下のいずれかの方法でアプリを起動します。
+
+#### 方法A: バッチファイルから起動（Windows推奨）
+フォルダ内にある `start.bat` をダブルクリックするだけで、サーバーが起動しブラウザが自動的に開きます。
+
+#### 方法B: コマンドラインから起動
+ターミナルで以下のコマンドを実行します（Node.js が必要です）。
 ```bash
-# Pythonを使用する場合
-python -m http.server 8000
-
-# Node.js (npx) を使用する場合
-npx serve .
+node server.js
+# または
+npm start
 ```
-ブラウザで `http://localhost:8000` を開きます。
+起動後、ブラウザで `http://localhost:3000` を開きます。
 
-> **Note:** Geolocation API のセキュリティ要件により、位置情報取得は HTTPS 環境または localhost 環境でのみ動作します。
-
-#### 方法B: GitHub Pages への公開
-リポジトリの「Settings」>「Pages」から `main` ブランチを指定して公開することで、Web上に即座にデプロイ可能です。
+---
 
 ### 3. アプリの操作手順
 1. 画面右上の **「APIキー設定」** ボタンをクリックします。
